@@ -166,6 +166,41 @@ if (!purchaseItemsSql.includes('ON DELETE SET NULL') || !purchaseItemsSql.includ
   database.pragma('foreign_keys = ON')
 }
 
+const deduplicateMenuItems = database.transaction(() => {
+  const duplicateNames = database.prepare(`
+    SELECT name FROM menu_items GROUP BY name COLLATE NOCASE HAVING COUNT(*) > 1
+  `).all()
+  const findItems = database.prepare('SELECT id, available FROM menu_items WHERE name = ? COLLATE NOCASE ORDER BY available DESC, id ASC')
+  const findPurchaseLine = database.prepare('SELECT quantity FROM purchase_items WHERE purchase_id = ? AND menu_item_id = ?')
+  const updatePurchaseLine = database.prepare('UPDATE purchase_items SET menu_item_id = ? WHERE purchase_id = ? AND menu_item_id = ?')
+  const mergePurchaseLine = database.prepare('UPDATE purchase_items SET quantity = quantity + ? WHERE purchase_id = ? AND menu_item_id = ?')
+  const deletePurchaseLine = database.prepare('DELETE FROM purchase_items WHERE purchase_id = ? AND menu_item_id = ?')
+  const moveReward = database.prepare('UPDATE rewards SET menu_item_id = ? WHERE menu_item_id = ?')
+  const deleteMenuItem = database.prepare('DELETE FROM menu_items WHERE id = ?')
+
+  duplicateNames.forEach(({ name }) => {
+    const items = findItems.all(name)
+    const canonicalId = items[0].id
+    items.slice(1).forEach((duplicate) => {
+      const purchaseLines = database.prepare('SELECT purchase_id, quantity FROM purchase_items WHERE menu_item_id = ?').all(duplicate.id)
+      purchaseLines.forEach((line) => {
+        const canonicalLine = findPurchaseLine.get(line.purchase_id, canonicalId)
+        if (canonicalLine) {
+          mergePurchaseLine.run(line.quantity, line.purchase_id, canonicalId)
+          deletePurchaseLine.run(line.purchase_id, duplicate.id)
+        } else {
+          updatePurchaseLine.run(canonicalId, line.purchase_id, duplicate.id)
+        }
+      })
+      moveReward.run(canonicalId, duplicate.id)
+      deleteMenuItem.run(duplicate.id)
+    })
+  })
+})
+
+deduplicateMenuItems()
+database.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_menu_items_name_unique ON menu_items(name COLLATE NOCASE)')
+
 if (database.prepare('SELECT COUNT(*) AS count FROM menu_items').get().count === 0) {
   database.exec(fs.readFileSync(path.join(__dirname, 'seed.sql'), 'utf8'))
 }
@@ -333,8 +368,10 @@ app.post('/api/menu', auth(['staff', 'admin']), (request, response) => {
   const { name, description = '', pricePaise, priceCents, category = 'drink' } = request.body
   const price = Number.isInteger(pricePaise) ? pricePaise : priceCents
   if (!name || !Number.isInteger(price) || price <= 0) return response.status(400).json({ error: 'Name and a positive price in paise are required' })
-  const result = database.prepare('INSERT INTO menu_items (name, description, price_cents, category) VALUES (?, ?, ?, ?)').run(name.trim(), description, price, category)
-  response.status(201).json({ item: database.prepare('SELECT * FROM menu_items WHERE id = ?').get(result.lastInsertRowid) })
+  const normalizedName = name.trim()
+  if (database.prepare('SELECT id FROM menu_items WHERE name = ? COLLATE NOCASE').get(normalizedName)) return response.status(409).json({ error: 'A menu item with this name already exists' })
+  const result = database.prepare('INSERT INTO menu_items (name, description, price_cents, category) VALUES (?, ?, ?, ?)').run(normalizedName, description, price, category)
+  response.status(201).json({ item: database.prepare('SELECT id, name, description, price_cents AS price_paise, category, available FROM menu_items WHERE id = ?').get(result.lastInsertRowid) })
 })
 
 app.patch('/api/menu/:id', auth(['staff', 'admin']), (request, response) => {
@@ -406,7 +443,7 @@ app.post('/api/purchases', auth(['customer', 'staff', 'admin']), (request, respo
   const customer = database.prepare('SELECT cp.*, u.name, u.role FROM customer_profiles cp JOIN users u ON u.id = cp.user_id WHERE cp.user_id = ?').get(customerId)
   if (!customer) return response.status(404).json({ error: 'Customer not found' })
   if (!customer.is_active) return response.status(403).json({ error: 'Customer membership is inactive' })
-  const findItem = database.prepare('SELECT id, price_cents AS price_paise FROM menu_items WHERE id = ? AND available = 1')
+  const findItem = database.prepare('SELECT id, name, price_cents AS price_paise FROM menu_items WHERE id = ? AND available = 1')
   const insertPurchase = database.prepare('INSERT INTO purchases (customer_id, staff_id, total_cents) VALUES (?, ?, ?)')
   const insertItem = database.prepare('INSERT INTO purchase_items (purchase_id, menu_item_id, item_name, quantity, unit_price_cents) VALUES (?, ?, ?, ?, ?)')
   const findRule = database.prepare('SELECT points_per_rupee FROM tier_rules WHERE tier = ?')
