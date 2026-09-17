@@ -603,3 +603,35 @@ npm run lint
 node --check server/index.js
 The API is now running from the correct project location:
 /workspaces/AurigaIT-Test/DreamCafe
+
+hey im getting error in many things , i think the main reason is we moved project from one location to another , like now im getting for checkout in cart , i wannt you to go to all those files and logic where this can affect funcitonality , and fix them , like endpoints and apis and etc. fix it fast
+Fixed the relocation-related issues.
+
+Root cause:
+
+The project moved into DreamCafe
+The workspace root no longer had package.json
+Running npm run dev, npm run build, or npm run api from the root failed or used the wrong location
+Added root-level command delegation:
+npm run dev
+npm run api
+npm run build
+npm run lint
+npm run create:staff
+All commands now forward to DreamCafe.
+
+Verified:
+
+Root npm run build passes
+Root npm run lint passes
+Root npm run dev starts the relocated app
+Vite proxy works through /api
+Checkout returns 201 Created
+Cart checkout updates points and profile correctly
+Menu create/edit/delete works
+Duplicate menu prevention works
+API runs from DreamCafe
+Temporary checkout test account was removed
+Run from the workspace root:
+npm run dev
+If port 5173 is already occupied, Vite will use another port such as 5174.

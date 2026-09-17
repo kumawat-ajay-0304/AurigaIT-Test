@@ -1,0 +1,13 @@
+{
+  "name": "dream-cafe-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix DreamCafe run dev",
+    "dev:frontend": "npm --prefix DreamCafe run dev:frontend",
+    "api": "npm --prefix DreamCafe run api",
+    "create:staff": "npm --prefix DreamCafe run create:staff",
+    "build": "npm --prefix DreamCafe run build",
+    "lint": "npm --prefix DreamCafe run lint",
+    "preview": "npm --prefix DreamCafe run preview"
+  }
+}
