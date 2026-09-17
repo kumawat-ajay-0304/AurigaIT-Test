@@ -566,3 +566,40 @@ Root documentation now contains:
 
 README.md
 REASONING.md
+
+hey the item removal logic doesn't work , also remove multiple items with duplicate entries from database , also double check the whole features of our product starting to end
+The deduplication code passes build, lint, and syntax checks. I’m restarting the API to apply it to the live database, then I’ll verify duplicate names are gone, the unique index exists, and the staff DELETE endpoint still physically removes a temporary item.
+Completed the full audit and fixed the menu/removal issues.
+
+Fixed:
+
+Removed duplicate menu entries from SQLite
+Added a unique case-insensitive menu-name index
+Prevented future duplicate menu creation with HTTP 409
+Fixed checkout failure caused by missing item_name snapshots
+Confirmed menu items are physically deleted
+Preserved purchase history after deletion:
+menu_item_id becomes NULL
+item_name remains stored
+Removed temporary audit test accounts and data
+Verified:
+
+Duplicate menu groups: 0
+Unique menu index: present
+SQLite foreign-key check: clean
+Menu create: working
+Menu edit: working
+Menu delete: working
+Duplicate menu prevention: HTTP 409
+Cart checkout: working
+Points awarding: working
+Tier promotion: working
+Tier notification outbox: working
+90-day clock endpoint: working
+Auth and staff access: working
+Validation passed:
+npm run build
+npm run lint
+node --check server/index.js
+The API is now running from the correct project location:
+/workspaces/AurigaIT-Test/DreamCafe
