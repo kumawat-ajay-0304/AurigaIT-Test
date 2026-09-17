@@ -1,0 +1,6 @@
+# Generated workspace artifacts
+node_modules/
+dist/
+
+# Dream cafe runtime database
+DreamCafe/server/*.sqlite
